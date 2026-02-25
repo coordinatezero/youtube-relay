@@ -123,7 +123,7 @@ def log_stream(pipe, prefix):
 
 def get_black_generator():
     cmd = [
-        'ffmpeg', '-re', '-y', '-hide_banner', '-loglevel', 'error',
+        'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'error',
         '-f', 'lavfi', '-i', f'color=c=black:s={WIDTH}x{HEIGHT}:r={FPS}',
         '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
         '-c:v', 'libx264', '-preset', 'ultrafast', '-g', str(FPS*2),
@@ -165,7 +165,8 @@ def run_relay():
     # 1. Run API Update
     try:
         YouTubeAPIHelper().update_broadcast()
-    except Exception: pass 
+    except Exception as e:
+        logging.info(f"[!] Couldn't update broadcast: {e}")
 
     # 2. Start Sender
     sender = start_sender()
@@ -231,7 +232,8 @@ def run_relay():
                 time.sleep(0.1)
 
     except KeyboardInterrupt:
-        pass
+        logging.info("Caught Ctrl-C, exiting...")
+        raise
     finally:
         if current_source: current_source.kill()
         sender.kill()
