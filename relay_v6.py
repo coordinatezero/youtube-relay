@@ -31,7 +31,7 @@ WIDTH = 1920
 HEIGHT = 1080
 FPS = 15
 
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(asctime)s %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
 # =================================================
 
 def load_config():
