@@ -201,7 +201,9 @@ def run_relay():
                 
                 if live_test.poll() is None:
                     logging.info(">>> DETECTED EXTERNAL STREAM <<<")
-                    if current_source: current_source.kill()
+                    if current_source:
+                        current_source.kill()
+                        current_source = None
                     current_source = live_test
                     source_type = "LIVE"
                     
@@ -211,13 +213,18 @@ def run_relay():
                     # Check why it failed
                     err = live_test.stderr.read().decode('utf-8', errors='ignore')
                     live_test.kill()
+                    live_test.wait()
+                    live_test = None
 
                     if "Server returned 404" in err:
                         logging.warning(f"NGINX 404: Stream key mismatch. Expecting: {INPUT_RTMP}")
                     
                     if source_type != "BLACK":
                         logging.info("[-] Input Offline. Sending Black Frames.")
-                        if current_source: current_source.kill()
+                        if current_source:
+                            current_source.kill()
+                            current_source.wait()
+                            current_source = None
                         current_source = get_black_generator()
                         source_type = "BLACK"
 
