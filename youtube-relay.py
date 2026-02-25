@@ -46,7 +46,7 @@ def load_config():
 APP_CONFIG = load_config()
 try:
     INPUT_RTMP = APP_CONFIG.get('input_rtmp')
-    YOUTUBE_RTMP = f"rtmp://a.rtmp.youtube.com/live2/{APP_CONFIG['stream_key']}"
+    YOUTUBE_RTMP = f"rtmp://a.rtmp.youtube.com/live2/{APP_CONFIG.get('stream_key')}"
     FPS = APP_CONFIG.get('fps')
 except Exception as e:
     logging.error(f"Missing config options: {e}")
