@@ -126,6 +126,8 @@ def get_black_generator():
         '-f', 'lavfi', '-i', f'color=c=black:s={WIDTH}x{HEIGHT}:r={FPS}',
         '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
         '-c:v', 'libx264', '-preset', 'ultrafast', '-g', str(FPS*2),
+        '-keyint_min', str(FPS*2),
+        '-sc_threshold', '0',
         '-c:a', 'aac', '-ar', '44100', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
     ]
@@ -140,6 +142,8 @@ def get_live_generator():
         '-rw_timeout', '5000000', # 5s Timeout
         '-i', INPUT_RTMP,
         '-c:v', 'libx264', '-preset', 'ultrafast', '-g', str(FPS*2),
+        '-keyint_min', str(FPS*2),
+        '-sc_threshold', '0',
         '-c:a', 'aac', '-ar', '44100', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
     ]
