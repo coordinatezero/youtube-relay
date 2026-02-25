@@ -47,7 +47,7 @@ APP_CONFIG = load_config()
 try:
     INPUT_RTMP = APP_CONFIG.get('input_rtmp')
     YOUTUBE_RTMP = f"rtmp://a.rtmp.youtube.com/live2/{APP_CONFIG.get('stream_key')}"
-    FPS = APP_CONFIG.get('fps')
+    FPS = int(APP_CONFIG.get('fps'))
 except Exception as e:
     logging.error(f"Missing config options: {e}")
     exit
@@ -138,15 +138,18 @@ def get_black_generator():
     cmd = [
         'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'error',
         '-f', 'lavfi', '-i', 'color=c=black:s=%dx%d:r=%d' % (WIDTH, HEIGHT, FPS),
-        '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
         '-r', str(FPS),
         '-vsync', 'cfr',
         '-c:v', 'libx264', '-preset', 'ultrafast',
+        '-b:v', '6000k',
+        '-maxrate', '6800k',
+        '-bufsize', '13600k',
         '-g', str(FPS * 2),
         '-keyint_min', str(FPS * 2),
         '-sc_threshold', '0',
         '-force_key_frames', 'expr:gte(t,n_forced*2)',
-        '-c:a', 'aac', '-ar', '48000', '-ac', '2',
+        '-c:a', 'aac', '-ar', '44100', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -162,11 +165,14 @@ def get_live_generator():
         '-r', str(FPS),
         '-vsync', 'cfr',
         '-c:v', 'libx264', '-preset', 'ultrafast',
+        '-b:v', '6000k',
+        '-maxrate', '6800k',
+        '-bufsize', '13600k',
         '-g', str(FPS * 2),
         '-keyint_min', str(FPS * 2),
         '-sc_threshold', '0',
         '-force_key_frames', 'expr:gte(t,n_forced*2)',
-        '-c:a', 'aac', '-ar', '48000', '-ac', '2',
+        '-c:a', 'aac', '-ar', '44100', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
