@@ -107,7 +107,9 @@ class YouTubeAPIHelper:
             logging.error(f"API Update Failed: {e}")
 
 def log_stream(pipe, prefix):
-    """Reads a pipe in a thread to prevent blocking and logs errors."""
+    """
+    Reads a pipe in a thread to prevent blocking and logs errors.
+    """
     try:
         for line in iter(pipe.readline, b''):
             msg = line.decode().strip()
@@ -121,12 +123,18 @@ def log_stream(pipe, prefix):
     except: pass
 
 def get_black_generator():
+    """
+    generate black frames, forces CFR and a 2-second GOP (keyframes every 2s)
+    """
     cmd = [
         'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'error',
-        '-f', 'lavfi', '-i', f'color=c=black:s={WIDTH}x{HEIGHT}:r={FPS}',
-        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-g', str(FPS*2),
-        '-keyint_min', str(FPS*2),
+        '-f', 'lavfi', '-i', 'color=c=black:s=%dx%d:r=%d' % (WIDTH, HEIGHT, FPS),
+        '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+        '-r', str(FPS),
+        '-vsync', 'cfr',
+        '-c:v', 'libx264', '-preset', 'ultrafast',
+        '-g', str(FPS * 2),
+        '-keyint_min', str(FPS * 2),
         '-sc_threshold', '0',
         '-c:a', 'aac', '-ar', '48000', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
@@ -135,14 +143,17 @@ def get_black_generator():
 
 def get_live_generator():
     """
-    Attempts to read from NGINX. 
+    Attempts to read from NGINX, Force CFR and a 2-second GOP (keyframes every 2s)
     """
     cmd = [
-        'ffmpeg', '-nostdin', '-y', '-hide_banner', '-loglevel', 'info', 
-        '-rw_timeout', '5000000', # 5s Timeout
+        'ffmpeg', '-nostdin', '-y', '-hide_banner', '-loglevel', 'info',
+        '-rw_timeout', '5000000',  # 5s Timeout
         '-i', INPUT_RTMP,
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-g', str(FPS*2),
-        '-keyint_min', str(FPS*2),
+        '-r', str(FPS),
+        '-vsync', 'cfr',
+        '-c:v', 'libx264', '-preset', 'ultrafast',
+        '-g', str(FPS * 2),
+        '-keyint_min', str(FPS * 2),
         '-sc_threshold', '0',
         '-c:a', 'aac', '-ar', '48000', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
