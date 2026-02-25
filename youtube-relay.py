@@ -82,7 +82,7 @@ class YouTubeAPIHelper:
     def update_broadcast(self):
         if not self.service: return
         try:
-            req = self.service.liveBroadcasts().list(part='id,snippet,status', broadcastType='all', mine=True, maxResults=5)
+            req = self.service.liveBroadcasts().list(part='id,snippet,status,contentDetails', broadcastType='all', mine=True, maxResults=5)
             resp = req.execute()
             broadcast = next((i for i in resp.get('items', []) if i.get('status', {}).get('lifeCycleStatus') == 'live'), None)
             if not broadcast:
@@ -91,15 +91,24 @@ class YouTubeAPIHelper:
             if broadcast:
                 bid = broadcast['id']
                 logging.info(f"Updating Broadcast: {broadcast.get('snippet',{}).get('title')} ({bid})")
+                details = self.service.liveBroadcasts().list(
+                    part='contentDetails',
+                    id=bid
+                ).execute()
+                content_details = details['items'][0].get('contentDetails', {})
+                content_details['enableDvr'] = False
                 self.service.liveBroadcasts().update(
-                    part='snippet,status',
+                    part='snippet,status,contentDetails',
                     body={
                         'id': bid,
                         'snippet': {
                             'title': APP_CONFIG.get('broadcast_title', 'Live Stream'),
                             'description': APP_CONFIG.get('broadcast_description', '')
                         },
-                        'status': {'privacyStatus': APP_CONFIG.get('privacy', 'public')}
+                        'status': {
+                            'privacyStatus': APP_CONFIG.get('privacy', 'public')
+                        },
+                        'contentDetails': content_details
                     }
                 ).execute()
                 logging.info("✓ Broadcast settings updated.")
@@ -136,6 +145,7 @@ def get_black_generator():
         '-g', str(FPS * 2),
         '-keyint_min', str(FPS * 2),
         '-sc_threshold', '0',
+        '-force_key_frames', 'expr:gte(t,n_forced*2)',
         '-c:a', 'aac', '-ar', '48000', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
     ]
@@ -155,6 +165,7 @@ def get_live_generator():
         '-g', str(FPS * 2),
         '-keyint_min', str(FPS * 2),
         '-sc_threshold', '0',
+        '-force_key_frames', 'expr:gte(t,n_forced*2)',
         '-c:a', 'aac', '-ar', '48000', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
     ]
