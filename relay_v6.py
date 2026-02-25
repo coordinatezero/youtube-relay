@@ -18,19 +18,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# ================= CONFIGURATION =================
+# Basic Config
 CONFIG_FILE = "/etc/youtube-relay/config.json"
-TOKEN_PATH = '/etc/youtube-relay/token.pickle'
-
-# CORRECTION: Updated Default Input to match your Wirecast stream key
-DEFAULT_INPUT_RTMP = "rtmp://localhost:1935/live/berkshire"
+PICKLE_FILE = '/etc/youtube-relay/token.pickle'
 
 # INTERNAL SETTINGS
 RELAY_HOST = "127.0.0.1"
 RELAY_PORT = 10000
 WIDTH = 1920
 HEIGHT = 1080
-FPS = 15
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(asctime)s %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
 # =================================================
@@ -48,10 +44,14 @@ def load_config():
 
 APP_CONFIG = load_config()
 # Prefer config file 'input_rtmp', otherwise use the default (berkshire)
-INPUT_RTMP = APP_CONFIG.get('input_rtmp', DEFAULT_INPUT_RTMP)
-YOUTUBE_RTMP = f"rtmp://a.rtmp.youtube.com/live2/{APP_CONFIG['stream_key']}"
+try:
+    INPUT_RTMP = APP_CONFIG.get('input_rtmp')
+    YOUTUBE_RTMP = f"rtmp://a.rtmp.youtube.com/live2/{APP_CONFIG['stream_key']}"
+    FPS = APP_CONFIG.get('fps')
+except Exception as e:
+    logging.error(f"Missing config options: {e}")
+    exit
 
-# --- API HELPER ---
 class YouTubeAPIHelper:
     def __init__(self):
         self.service = None
@@ -59,11 +59,11 @@ class YouTubeAPIHelper:
 
     def authenticate(self):
         creds = None
-        if not os.path.exists(TOKEN_PATH):
-            logging.error(f"Token not found at {TOKEN_PATH}")
+        if not os.path.exists(PICKLE_FILE):
+            logging.error(f"Token not found at {PICKLE_FILE}")
             return
         try:
-            with open(TOKEN_PATH, 'rb') as token:
+            with open(PICKLE_FILE, 'rb') as token:
                 creds = pickle.load(token)
         except Exception:
             return
@@ -71,7 +71,7 @@ class YouTubeAPIHelper:
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
-                with open(TOKEN_PATH, 'wb') as token: pickle.dump(creds, token)
+                with open(PICKLE_FILE, 'wb') as token: pickle.dump(creds, token)
             except: return
 
         if creds and creds.valid:
@@ -106,8 +106,6 @@ class YouTubeAPIHelper:
         except Exception as e:
             logging.error(f"API Update Failed: {e}")
 
-# --- FFmpeg HELPERS ---
-
 def log_stream(pipe, prefix):
     """Reads a pipe in a thread to prevent blocking and logs errors."""
     try:
@@ -116,7 +114,8 @@ def log_stream(pipe, prefix):
             # Filter for specific NGINX errors
             if "Server returned 404" in msg:
                 logging.error(f"[{prefix}] 404 Error! NGINX cannot find stream '{INPUT_RTMP}'")
-                logging.error(f"[{prefix}] Verify Wirecast is streaming to 'rtmp://.../live' with key 'berkshire'")
+                ACSK = APP_CONFIG['stream_key']
+                logging.error(f"[{prefix}] Verify external app is streaming to 'rtmp://.../live' with key '{ACSK}'")
             elif "Connection refused" in msg:
                  logging.warning(f"[{prefix}] Connection Refused. Is NGINX running?")
     except: pass
@@ -137,7 +136,7 @@ def get_live_generator():
     Attempts to read from NGINX. 
     """
     cmd = [
-        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'info', 
+        'ffmpeg', '-nostdin', '-y', '-hide_banner', '-loglevel', 'info', 
         '-rw_timeout', '5000000', # 5s Timeout
         '-i', INPUT_RTMP,
         '-c:v', 'libx264', '-preset', 'ultrafast', '-g', str(FPS*2),
@@ -155,20 +154,18 @@ def start_sender():
     ]
     return subprocess.Popen(cmd, stderr=subprocess.PIPE)
 
-# --- MAIN LOOP ---
-
 def run_relay():
-    logging.info("--- RELAY V6 (Berkshire Edition) ---")
+    logging.info("YouTube Relay")
     logging.info(f"[*] Listening for Input: {INPUT_RTMP}")
     logging.info(f"[*] Target: YouTube")
 
-    # 1. Run API Update
+    # update broadcast settings
     try:
         YouTubeAPIHelper().update_broadcast()
     except Exception as e:
         logging.info(f"[!] Couldn't update broadcast: {e}")
 
-    # 2. Start Sender
+    # start the sender
     sender = start_sender()
     threading.Thread(target=log_stream, args=(sender.stderr, "SENDER"), daemon=True).start()
     time.sleep(1)
@@ -199,7 +196,7 @@ def run_relay():
                 time.sleep(0.5)
                 
                 if live_test.poll() is None:
-                    logging.info(">>> DETECTED WIRECAST STREAM <<<")
+                    logging.info(">>> DETECTED EXTERNAL STREAM <<<")
                     if current_source: current_source.kill()
                     current_source = live_test
                     source_type = "LIVE"
