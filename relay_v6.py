@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# coordinatezero@gmail.com
 
 import subprocess
 import socket
