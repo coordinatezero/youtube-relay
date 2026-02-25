@@ -43,7 +43,6 @@ def load_config():
         sys.exit(1)
 
 APP_CONFIG = load_config()
-# Prefer config file 'input_rtmp', otherwise use the default (berkshire)
 try:
     INPUT_RTMP = APP_CONFIG.get('input_rtmp')
     YOUTUBE_RTMP = f"rtmp://a.rtmp.youtube.com/live2/{APP_CONFIG['stream_key']}"
@@ -128,7 +127,7 @@ def get_black_generator():
         '-c:v', 'libx264', '-preset', 'ultrafast', '-g', str(FPS*2),
         '-keyint_min', str(FPS*2),
         '-sc_threshold', '0',
-        '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+        '-c:a', 'aac', '-ar', '48000', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -144,7 +143,7 @@ def get_live_generator():
         '-c:v', 'libx264', '-preset', 'ultrafast', '-g', str(FPS*2),
         '-keyint_min', str(FPS*2),
         '-sc_threshold', '0',
-        '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+        '-c:a', 'aac', '-ar', '48000', '-ac', '2',
         '-f', 'mpegts', 'pipe:1'
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
