@@ -159,7 +159,7 @@ def get_live_generator():
     Attempts to read from NGINX, Force CFR and a 2-second GOP (keyframes every 2s)
     """
     cmd = [
-        'ffmpeg', '-nostdin', '-y', '-hide_banner', '-loglevel', 'info',
+        'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'info',
         '-rw_timeout', '5000000',  # 5s Timeout
         '-i', INPUT_RTMP,
         '-r', str(FPS),
