@@ -186,6 +186,18 @@ def start_sender():
     ]
     return subprocess.Popen(cmd, stderr=subprocess.PIPE)
 
+def is_live_present():
+    cmd = [
+        'ffprobe', '-v', 'error',
+        '-rw_timeout', '2000000',
+        '-select_streams', 'v:0',
+        '-show_entries', 'stream=codec_name',
+        '-of', 'default=nw=1:nk=1',
+        INPUT_RTMP
+    ]
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return p.returncode == 0 and p.stdout.strip() != b''
+
 def run_relay():
     logging.info("YouTube Relay")
     logging.info(f"[*] Listening for Input: {INPUT_RTMP}")
@@ -223,16 +235,13 @@ def run_relay():
 
             # Check for Live Stream
             if source_type != "LIVE":
-                # Launch a probe process
-                live_test = get_live_generator()
-                time.sleep(0.5)
-                
-                if live_test.poll() is None:
+                if is_live_present():
                     logging.info(">>> DETECTED EXTERNAL STREAM <<<")
                     if current_source:
                         current_source.kill()
+                        current_source.wait()
                         current_source = None
-                    current_source = live_test
+                    current_source = get_live_generator()
                     source_type = "LIVE"
                     
                     # Log stderr to catch mid-stream errors
