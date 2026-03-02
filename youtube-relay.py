@@ -209,7 +209,9 @@ def start_sender():
 def is_live_present():
     cmd = [
         'ffprobe', '-v', 'error',
-        '-rw_timeout', '2000000',
+        '-rw_timeout', '10000000',
+        '-analyzeduration', '1000000',
+        '-probesize', '1000000',
         '-select_streams', 'v:0',
         '-show_entries', 'stream=codec_name',
         '-of', 'default=nw=1:nk=1',
