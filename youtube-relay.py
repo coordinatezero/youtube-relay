@@ -65,25 +65,43 @@ class YouTubeAPIHelper:
         try:
             with open(PICKLE_FILE, 'rb') as token:
                 creds = pickle.load(token)
-        except Exception:
+        except Exception as e:
+            logging.error("Failed to load token pickle: %r", e)
             return
 
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
                 with open(PICKLE_FILE, 'wb') as token: pickle.dump(creds, token)
-            except: return
+            except Exception as e:
+                logging.error("Token refresh failed: %r", e)
+                return
 
         if creds and creds.valid:
             try:
                 self.service = build('youtube', 'v3', credentials=creds, cache_discovery=False)
-            except: pass
+                logging.info("YouTube API service initialised")
+            except Exception as e:
+                logging.error("YouTube API build() failed: %r", e)
+                self.service = None
+        else:
+            logging.error("Token loaded but not valid and not refreshable (no refresh_token?)")
+            self.service = None
 
     def update_broadcast(self):
-        if not self.service: return
+        if not self.service:
+            logging.info("not self.service")
+            return
         try:
             req = self.service.liveBroadcasts().list(part='id,snippet,status,contentDetails', broadcastType='all', mine=True, maxResults=5)
             resp = req.execute()
+            logging.info("Broadcast candidates: %s", [
+                (i.get('id'),
+                 i.get('snippet', {}).get('title'),
+                 i.get('status', {}).get('lifeCycleStatus'),
+                 i.get('status', {}).get('privacyStatus'))
+                for i in resp.get('items', [])
+            ])
             broadcast = next((i for i in resp.get('items', []) if i.get('status', {}).get('lifeCycleStatus') == 'live'), None)
             if not broadcast:
                 broadcast = next((i for i in resp.get('items', []) if i.get('status', {}).get('lifeCycleStatus') in ('ready','created')), None)
@@ -112,8 +130,10 @@ class YouTubeAPIHelper:
                     }
                 ).execute()
                 logging.info("✓ Broadcast settings updated.")
+                return bid
         except Exception as e:
             logging.error(f"API Update Failed: {e}")
+        return None
 
 def log_stream(pipe, prefix):
     """
@@ -203,11 +223,7 @@ def run_relay():
     logging.info(f"[*] Listening for Input: {INPUT_RTMP}")
     logging.info(f"[*] Target: YouTube")
 
-    # update broadcast settings
-    try:
-        YouTubeAPIHelper().update_broadcast()
-    except Exception as e:
-        logging.info(f"[!] Couldn't update broadcast: {e}")
+    yt = YouTubeAPIHelper()
 
     # start the sender
     sender = start_sender()
@@ -243,19 +259,31 @@ def run_relay():
                         current_source = None
                     current_source = get_live_generator()
                     source_type = "LIVE"
+
+                    # Set public + DVR off at the moment live input appears
+                    try:
+                        APP_CONFIG['privacy'] = 'public'
+                        bid = yt.update_broadcast()
+                        if bid:
+                            chk = yt.service.liveBroadcasts().list(part='status', id=bid).execute()
+                            privacy = chk['items'][0]['status'].get('privacyStatus')
+                            logging.info("Post-update privacyStatus for %s: %s", bid, privacy)
+                    except Exception as e:
+                        logging.info("[!] Couldn't update broadcast: %s", e)
                     
                     # Log stderr to catch mid-stream errors
                     threading.Thread(target=log_stream, args=(current_source.stderr, "LIVE_IN"), daemon=True).start()
                 else:
-                    # Check why it failed
-                    err = live_test.stderr.read().decode('utf-8', errors='ignore')
-                    live_test.kill()
-                    live_test.wait()
-                    live_test = None
+                    msg = ""
+                    if current_source and current_source.stderr:
+                        msg = current_source.stderr.read(4096).decode('utf-8', errors='ignore').strip()
+                    if msg:
+                        logging.info("Live stream ended: %s", msg)
+                        if "Server returned 404" in msg:
+                            logging.info("NGINX 404: Stream key mismatch. Expecting: %s", INPUT_RTMP)
+                    else:
+                        logging.info("Live stream ended")
 
-                    if "Server returned 404" in err:
-                        logging.warning(f"NGINX 404: Stream key mismatch. Expecting: {INPUT_RTMP}")
-                    
                     if source_type != "BLACK":
                         logging.info("[-] Input Offline. Sending Black Frames.")
                         if current_source:
@@ -269,20 +297,34 @@ def run_relay():
             try:
                 data = current_source.stdout.read(65536)
                 if not data:
-                    if source_type == "LIVE": logging.info("Live Stream Ended (EOF)")
+                    if source_type == "LIVE":
+                        logging.info("Live Stream Ended (EOF)")
+                    if current_source:
+                        current_source.kill()
+                        current_source.wait()
+                        current_source = None
                     source_type = "NONE"
                     continue
                 conn.sendall(data)
-            except:
+            except Exception:
                 time.sleep(0.1)
 
     except KeyboardInterrupt:
         logging.info("Caught Ctrl-C, exiting...")
-        raise
+    except Exception as e:
+        logging.info("Fatal error: %r", e)
     finally:
-        if current_source: current_source.kill()
-        sender.kill()
-        conn.close()
+        # cleanup exactly as you already do
+        if current_source:
+            current_source.kill()
+            current_source.wait()
+        if sender:
+            sender.kill()
+            sender.wait()
+        if conn:
+            conn.close()
+        subprocess.run(['stty', 'sane'], check=False)
+
 
 if __name__ == "__main__":
     run_relay()
