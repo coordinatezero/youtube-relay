@@ -259,12 +259,18 @@ def run_relay():
                 time.sleep(1)
                 conn = socket.create_connection((RELAY_HOST, RELAY_PORT))
 
+            if current_source is None:
+                logging.info("No current source, starting holding image")
+                current_source = get_black_generator()   # your holding-image generator
+                source_type = "BLACK"
+
             # Check for Live Stream
             if source_type != "LIVE":
                 if is_live_present():
                     logging.info(">>> DETECTED EXTERNAL STREAM <<<")
                     if current_source:
-                        current_source.kill()
+                        if current_source.poll() is None:
+                            current_source.kill()
                         current_source.wait()
                         current_source = None
                     current_source = get_live_generator()
