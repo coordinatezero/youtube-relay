@@ -230,11 +230,11 @@ def is_live_present():
     out = (p.stdout or b'').strip()
     ok = (p.returncode == 0 and out != b'')
 
-    if not ok:
-        logging.info("is_live_present rc=%s out=%r err=%r",
-                     p.returncode,
-                     out[:200],
-                     (p.stderr or b'')[:200])
+    #if not ok:
+    #    logging.info("is_live_present rc=%s out=%r err=%r",
+    #                 p.returncode,
+    #                 out[:200],
+    #                 (p.stderr or b'')[:200])
     return ok
 
 def run_relay():
@@ -335,7 +335,7 @@ def run_relay():
 
             # Data Pump
             try:
-                logging.info("Data pump: reading from %s", source_type)
+                #logging.info("Data pump: reading from %s", source_type)
                 data = current_source.stdout.read(65536)
                 if not data:
                     msg = ""
