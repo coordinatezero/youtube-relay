@@ -205,12 +205,14 @@ def get_live_generator():
 
 def start_sender():
     cmd = [
-        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'info', '-stats',
+        'ffmpeg', '-y', '-hide_banner',
+        '-loglevel', 'info', '-stats',
         '-f', 'mpegts', '-fflags', '+genpts+igndts',
         '-i', f'tcp://{RELAY_HOST}:{RELAY_PORT}?listen',
-        '-c', 'copy', '-f', 'flv', YOUTUBE_RTMP
+        '-c', 'copy',
+        '-f', 'flv', YOUTUBE_RTMP
     ]
-    return subprocess.Popen(cmd, stderr=subprocess.PIPE)
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subproces.STDOUT)
 
 def is_live_present():
     cmd = [
@@ -224,9 +226,16 @@ def is_live_present():
         INPUT_RTMP
     ]
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if p.returncode != 0 or out == b'':
-        logging.info("is_live_present rc=%s out=%r err=%r", p.returncode, out[:200], p.stderr[:200])
-    return p.returncode == 0 and p.stdout.strip() != b''
+
+    out = (p.stdout or b'').strip()
+    ok = (p.returncode == 0 and out != b'')
+
+    if not ok:
+        logging.info("is_live_present rc=%s out=%r err=%r",
+                     p.returncode,
+                     out[:200],
+                     (p.stderr or b'')[:200])
+    return ok
 
 def run_relay():
     logging.info("YouTube Relay")
