@@ -180,30 +180,7 @@ def get_black_generator():
         # Output
         '-f', 'mpegts', 'pipe:1'
     ]
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
-#def get_black_generator():
-#    """
-#    generate black frames, forces CFR and a 2-second GOP (keyframes every 2s)
-#    """
-#    cmd = [
-#        'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'error',
-#        '-f', 'lavfi', '-i', 'color=c=black:s=%dx%d:r=%d' % (WIDTH, HEIGHT, FPS),
-#        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
-#        '-r', str(FPS),
-#        '-vsync', 'cfr',
-#        '-c:v', 'libx264', '-preset', 'ultrafast',
-#        '-b:v', '6000k',
-#        '-maxrate', '6800k',
-#        '-bufsize', '13600k',
-#        '-g', str(FPS * 2),
-#        '-keyint_min', str(FPS * 2),
-#        '-sc_threshold', '0',
-#        '-force_key_frames', 'expr:gte(t,n_forced*2)',
-#        '-c:a', 'aac', '-ar', '44100', '-ac', '2',
-#        '-f', 'mpegts', 'pipe:1'
-#    ]
-#    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def get_live_generator():
     """
@@ -248,7 +225,7 @@ def is_live_present():
         '-of', 'default=nw=1:nk=1',
         INPUT_RTMP
     ]
-    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return p.returncode == 0 and p.stdout.strip() != b''
 
 def run_relay():
@@ -332,10 +309,15 @@ def run_relay():
             try:
                 data = current_source.stdout.read(65536)
                 if not data:
+                    if current_source and current_source.stderr:
+                        msg = current_source.stderr.read(4096).decode('utf-8', errors='ignore').strip()
+                        if msg:
+                            logging.info("ffmpeg stderr: %s", msg)
                     if source_type == "LIVE":
                         logging.info("Live Stream Ended (EOF)")
                     if current_source:
-                        current_source.kill()
+                        if current_source.poll() is None:
+                            current_source.kill()
                         current_source.wait()
                         current_source = None
                     source_type = "NONE"
