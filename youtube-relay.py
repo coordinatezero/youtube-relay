@@ -159,12 +159,10 @@ def get_black_generator():
     cmd = [
         'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'error',
         # Loop a still PNG as video at FPS
-        '-loop', '1',
-        '-framerate', str(FPS),
-        '-i', HOLDING_PNG,
-        '-vf', 'scale=%dx%d,format=yuv420p' % (WIDTH, HEIGHT),
+        '-loop', '1', '-framerate', str(FPS), '-i', HOLDING_PNG,
         # Silent audio
         '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+        '-vf', 'scale=%dx%d,format=yuv420p' % (WIDTH, HEIGHT),
         # Encode (keep your existing settings)
         '-r', str(FPS),
         '-vsync', 'cfr',
