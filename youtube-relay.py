@@ -205,7 +205,7 @@ def get_live_generator():
 
 def start_sender():
     cmd = [
-        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'info', '-stats',
         '-f', 'mpegts', '-fflags', '+genpts+igndts',
         '-i', f'tcp://{RELAY_HOST}:{RELAY_PORT}?listen',
         '-c', 'copy', '-f', 'flv', YOUTUBE_RTMP
