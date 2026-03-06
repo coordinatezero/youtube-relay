@@ -51,7 +51,7 @@ try:
     HOLDING_PNG = APP_CONFIG.get('holding_png', '/etc/youtube-relay/holding.png')
 except Exception as e:
     logging.error(f"Missing config options: {e}")
-    exit
+    sys.exit(1)
 
 class YouTubeAPIHelper:
     def __init__(self):
@@ -266,7 +266,9 @@ def run_relay():
 
             # Check for Live Stream
             if source_type != "LIVE":
-                if is_live_present():
+                ok = is_live_present()
+                logging.info("Live probe: %s", ok)
+                if ok:
                     logging.info(">>> DETECTED EXTERNAL STREAM <<<")
                     if current_source:
                         if current_source.poll() is None:
@@ -303,7 +305,8 @@ def run_relay():
                     if source_type != "BLACK":
                         logging.info("[-] Input Offline. Sending image %s." % HOLDING_PNG)
                         if current_source:
-                            current_source.kill()
+                            if current_source.poll() is None:
+                                current_source.kill()
                             current_source.wait()
                             current_source = None
                         current_source = get_black_generator()
@@ -327,8 +330,9 @@ def run_relay():
                     source_type = "NONE"
                     continue
                 conn.sendall(data)
-            except Exception:
-                time.sleep(0.1)
+            except Exception as e:
+                logging.info("Data pump exception: %r", e)
+                time.sleep(0.5)
 
     except KeyboardInterrupt:
         logging.info("Caught Ctrl-C, exiting...")
