@@ -258,6 +258,8 @@ def run_relay():
 
     yt = YouTubeAPIHelper()
 
+    yt.update_broadcast()
+
     # start the sender
     sender = start_sender()
     threading.Thread(target=log_stream, args=(sender.stderr, "SENDER"), daemon=True).start()
