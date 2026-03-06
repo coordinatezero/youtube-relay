@@ -259,7 +259,11 @@ def run_relay():
 
     current_source = None
     source_type = "NONE"
-    
+
+    last_probe = 0.0
+    probe_interval = 5.0
+    last_probe_ok = None
+
     try:
         while True:
             # Monitor Sender
@@ -276,9 +280,15 @@ def run_relay():
                 source_type = "BLACK"
 
             # Check for Live Stream
-            if source_type != "LIVE":
+            now = time.time()
+            if source_type != "LIVE" and (now - last_probe) >= probe_interval:
+                last_probe = now
                 ok = is_live_present()
-                logging.info("Live probe: %s", ok)
+                if ok != last_probe_ok:
+                    logging.info("Live probe: %s", ok)
+                    if not ok:
+                        logging.info("Live stream ended")
+                    last_probe_ok = ok
                 if ok:
                     logging.info(">>> DETECTED EXTERNAL STREAM <<<")
                     if current_source:
