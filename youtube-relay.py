@@ -304,7 +304,7 @@ def run_relay():
                     threading.Thread(target=log_stream, args=(current_source.stderr, "LIVE_IN"), daemon=True).start()
                 else:
                     msg = ""
-                    if current_source and current_source.stderr:
+                    if current_source and current_source.stderr and current_source.poll() is not None:
                         msg = current_source.stderr.read(4096).decode('utf-8', errors='ignore').strip()
                     if msg:
                         logging.info("Live stream ended: %s", msg)
@@ -328,7 +328,8 @@ def run_relay():
                 logging.info("Data pump: reading from %s", source_type)
                 data = current_source.stdout.read(65536)
                 if not data:
-                    if current_source and current_source.stderr:
+                    msg = ""
+                    if current_source and current_source.stderr and current_source.poll() is not None:
                         msg = current_source.stderr.read(4096).decode('utf-8', errors='ignore').strip()
                         if msg:
                             logging.info("ffmpeg stderr: %s", msg)
