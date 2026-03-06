@@ -48,6 +48,7 @@ try:
     INPUT_RTMP = APP_CONFIG.get('input_rtmp')
     YOUTUBE_RTMP = f"rtmp://a.rtmp.youtube.com/live2/{APP_CONFIG.get('stream_key')}"
     FPS = int(APP_CONFIG.get('fps'))
+    HOLDING_JPG = APP_CONFIG.get('holding_jpg', '/etc/youtube-relay/holding.jpg')
 except Exception as e:
     logging.error(f"Missing config options: {e}")
     exit
@@ -153,12 +154,18 @@ def log_stream(pipe, prefix):
 
 def get_black_generator():
     """
-    generate black frames, forces CFR and a 2-second GOP (keyframes every 2s)
+    generate a static holding image, forces CFR and a 2-second GOP (keyframes every 2s)
     """
     cmd = [
         'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'error',
-        '-f', 'lavfi', '-i', 'color=c=black:s=%dx%d:r=%d' % (WIDTH, HEIGHT, FPS),
+        # Loop a still JPG as video at FPS
+        '-loop', '1',
+        '-framerate', str(FPS),
+        '-i', HOLDING_JPG,
+        '-vf', 'scale=%dx%d,format=yuv420p' % (WIDTH, HEIGHT),
+        # Silent audio
         '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+        # Encode (keep your existing settings)
         '-r', str(FPS),
         '-vsync', 'cfr',
         '-c:v', 'libx264', '-preset', 'ultrafast',
@@ -170,9 +177,33 @@ def get_black_generator():
         '-sc_threshold', '0',
         '-force_key_frames', 'expr:gte(t,n_forced*2)',
         '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+        # Output
         '-f', 'mpegts', 'pipe:1'
     ]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+#def get_black_generator():
+#    """
+#    generate black frames, forces CFR and a 2-second GOP (keyframes every 2s)
+#    """
+#    cmd = [
+#        'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'error',
+#        '-f', 'lavfi', '-i', 'color=c=black:s=%dx%d:r=%d' % (WIDTH, HEIGHT, FPS),
+#        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+#        '-r', str(FPS),
+#        '-vsync', 'cfr',
+#        '-c:v', 'libx264', '-preset', 'ultrafast',
+#        '-b:v', '6000k',
+#        '-maxrate', '6800k',
+#        '-bufsize', '13600k',
+#        '-g', str(FPS * 2),
+#        '-keyint_min', str(FPS * 2),
+#        '-sc_threshold', '0',
+#        '-force_key_frames', 'expr:gte(t,n_forced*2)',
+#        '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+#        '-f', 'mpegts', 'pipe:1'
+#    ]
+#    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
 def get_live_generator():
     """
