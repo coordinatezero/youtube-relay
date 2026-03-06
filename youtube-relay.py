@@ -48,7 +48,7 @@ try:
     INPUT_RTMP = APP_CONFIG.get('input_rtmp')
     YOUTUBE_RTMP = f"rtmp://a.rtmp.youtube.com/live2/{APP_CONFIG.get('stream_key')}"
     FPS = int(APP_CONFIG.get('fps'))
-    HOLDING_JPG = APP_CONFIG.get('holding_jpg', '/etc/youtube-relay/holding.jpg')
+    HOLDING_PNG = APP_CONFIG.get('holding_png', '/etc/youtube-relay/holding.png')
 except Exception as e:
     logging.error(f"Missing config options: {e}")
     exit
@@ -158,10 +158,10 @@ def get_black_generator():
     """
     cmd = [
         'ffmpeg', '-nostdin', '-re', '-y', '-hide_banner', '-loglevel', 'error',
-        # Loop a still JPG as video at FPS
+        # Loop a still PNG as video at FPS
         '-loop', '1',
         '-framerate', str(FPS),
-        '-i', HOLDING_JPG,
+        '-i', HOLDING_PNG,
         '-vf', 'scale=%dx%d,format=yuv420p' % (WIDTH, HEIGHT),
         # Silent audio
         '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
@@ -318,7 +318,7 @@ def run_relay():
                         logging.info("Live stream ended")
 
                     if source_type != "BLACK":
-                        logging.info("[-] Input Offline. Sending Black Frames.")
+                        logging.info("[-] Input Offline. Sending image %s." % HOLDING_PNG)
                         if current_source:
                             current_source.kill()
                             current_source.wait()
