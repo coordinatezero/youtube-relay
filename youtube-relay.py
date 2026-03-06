@@ -325,6 +325,7 @@ def run_relay():
 
             # Data Pump
             try:
+                logging.info("Data pump: reading from %s", source_type)
                 data = current_source.stdout.read(65536)
                 if not data:
                     if current_source and current_source.stderr:
