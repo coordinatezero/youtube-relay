@@ -212,7 +212,7 @@ def start_sender():
         '-c', 'copy',
         '-f', 'flv', YOUTUBE_RTMP
     ]
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subproces.STDOUT)
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 def is_live_present():
     cmd = [
