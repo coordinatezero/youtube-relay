@@ -341,6 +341,9 @@ def run_relay():
                     source_type = "NONE"
                     continue
                 conn.sendall(data)
+                bytes_sent = bytes_sent + len(data) if 'bytes_sent' in locals() else len(data)
+                if bytes_sent % (5 * 1024 * 1024) < len(data):  # every ~5MB
+                    logging.info("Pumped %d bytes to sender", bytes_sent)
             except Exception as e:
                 logging.info("Data pump exception: %r", e)
                 time.sleep(0.5)
