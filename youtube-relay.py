@@ -224,6 +224,8 @@ def is_live_present():
         INPUT_RTMP
     ]
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if p.returncode != 0 or out == b'':
+        logging.info("is_live_present rc=%s out=%r err=%r", p.returncode, out[:200], p.stderr[:200])
     return p.returncode == 0 and p.stdout.strip() != b''
 
 def run_relay():
