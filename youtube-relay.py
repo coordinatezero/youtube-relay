@@ -147,6 +147,12 @@ def log_stream(pipe, prefix):
             msg = line.decode('utf-8', errors='ignore').strip()
             if not msg:
                 continue
+            if "Invalid timestamps" in msg:
+                continue
+            if "timestamp discontinuity" in msg:
+                continue
+            if "bitrate=" in msg and "speed=" in msg:
+                continue
             if "Server returned 404" in msg:
                 logging.error("[%s] 404 Error! NGINX cannot find stream '%s'", prefix, INPUT_RTMP)
                 ACSK = APP_CONFIG['stream_key']
