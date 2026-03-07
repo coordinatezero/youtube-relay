@@ -140,17 +140,23 @@ def log_stream(pipe, prefix):
     """
     Reads a pipe in a thread to prevent blocking and logs errors.
     """
+    if pipe is None:
+        return
     try:
         for line in iter(pipe.readline, b''):
-            msg = line.decode().strip()
-            # Filter for specific NGINX errors
+            msg = line.decode('utf-8', errors='ignore').strip()
+            if not msg:
+                continue
             if "Server returned 404" in msg:
-                logging.error(f"[{prefix}] 404 Error! NGINX cannot find stream '{INPUT_RTMP}'")
+                logging.error("[%s] 404 Error! NGINX cannot find stream '%s'", prefix, INPUT_RTMP)
                 ACSK = APP_CONFIG['stream_key']
-                logging.error(f"[{prefix}] Verify external app is streaming to 'rtmp://.../live' with key '{ACSK}'")
+                logging.error("[%s] Verify external app is streaming to 'rtmp://.../live' with key '%s'", prefix, ACSK)
             elif "Connection refused" in msg:
-                 logging.warning(f"[{prefix}] Connection Refused. Is NGINX running?")
-    except: pass
+                logging.warning("[%s] Connection Refused. Is NGINX running?", prefix)
+            else:
+                logging.info("[%s] %s", prefix, msg)
+    except Exception as e:
+        logging.warning("[%s] log_stream exited: %r", prefix, e)
 
 def get_black_generator():
     """
@@ -212,7 +218,21 @@ def start_sender():
         '-c', 'copy',
         '-f', 'flv', YOUTUBE_RTMP
     ]
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+def connect_sender(max_attempts=10, delay=1.0):
+    last_err = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return socket.create_connection((RELAY_HOST, RELAY_PORT), timeout=5)
+        except Exception as e:
+            last_err = e
+            logging.warning(
+                "Sender connect attempt %d/%d failed: %r",
+                attempt, max_attempts, e
+            )
+            time.sleep(delay)
+    raise RuntimeError("Could not connect to sender: %r" % (last_err,))
 
 def is_live_present():
     cmd = [
@@ -230,12 +250,23 @@ def is_live_present():
     out = (p.stdout or b'').strip()
     ok = (p.returncode == 0 and out != b'')
 
-    #if not ok:
-    #    logging.info("is_live_present rc=%s out=%r err=%r",
-    #                 p.returncode,
-    #                 out[:200],
-    #                 (p.stderr or b'')[:200])
     return ok
+
+def stop_process(proc, name="process", timeout=3):
+    if not proc:
+        return
+    try:
+        if proc.poll() is None:
+            logging.info("Stopping %s", name)
+            proc.terminate()
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                logging.warning("%s did not exit after terminate(), killing", name)
+                proc.kill()
+                proc.wait(timeout=2)
+    except Exception as e:
+        logging.warning("Error stopping %s: %r", name, e)
 
 def run_relay():
     logging.info("YouTube Relay")
@@ -252,7 +283,7 @@ def run_relay():
     time.sleep(1)
 
     try:
-        conn = socket.create_connection((RELAY_HOST, RELAY_PORT))
+        conn = connect_sender()
     except Exception as e:
         logging.error(f"Sender connection failed: {e}")
         return
@@ -264,15 +295,39 @@ def run_relay():
     probe_interval = 5.0
     last_probe_ok = None
 
+    bytes_sent = 0
+    live_probe_hits = 0
+    live_probe_misses = 0
     try:
         while True:
             # Monitor Sender
-            if sender.poll() is not None:
+            if sender is None or sender.poll() is not None:
                 logging.error("Sender died. Restarting...")
-                conn.close()
-                sender = start_sender()
-                time.sleep(1)
-                conn = socket.create_connection((RELAY_HOST, RELAY_PORT))
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    conn = None
+
+                stop_process(sender, "sender")
+                sender = None
+
+                try:
+                    sender = start_sender()
+                    threading.Thread(target=log_stream, args=(sender.stderr, "SENDER"), daemon=True).start()
+                    conn = connect_sender()
+                except Exception as reconnect_err:
+                    logging.error("Sender restart failed: %r", reconnect_err)
+                    stop_process(sender, "sender")
+                    sender = None
+                    conn = None
+                    source_type = "NONE"
+                    if current_source and current_source.poll() is None:
+                        stop_process(current_source, "current source")
+                    current_source = None
+                    time.sleep(2)
+                    continue
 
             if current_source is None:
                 logging.info("No current source, starting holding image")
@@ -284,20 +339,33 @@ def run_relay():
             if source_type != "LIVE" and (now - last_probe) >= probe_interval:
                 last_probe = now
                 ok = is_live_present()
+                if ok:
+                    live_probe_hits += 1
+                    live_probe_misses = 0
+                else:
+                    live_probe_misses += 1
+                    live_probe_hits = 0
+
+                confirmed_live = (live_probe_hits >= 2)
+
                 if ok != last_probe_ok:
                     logging.info("Live probe: %s", ok)
                     if not ok:
                         logging.info("Live stream ended")
                     last_probe_ok = ok
-                if ok:
+
+                if confirmed_live:
                     logging.info(">>> DETECTED EXTERNAL STREAM <<<")
                     if current_source:
-                        if current_source.poll() is None:
-                            current_source.kill()
-                        current_source.wait()
+                        stop_process(current_source, "idle screen")
                         current_source = None
-                    current_source = get_live_generator()
-                    source_type = "LIVE"
+                    try:
+                        current_source = get_live_generator()
+                        source_type = "LIVE"
+                    except Exception as e:
+                        logging.error("Failed to start live generator: %r", e)
+                        current_source = get_black_generator()
+                        source_type = "BLACK"
 
                     # Set public + DVR off at the moment live input appears
                     try:
@@ -313,22 +381,13 @@ def run_relay():
                     # Log stderr to catch mid-stream errors
                     threading.Thread(target=log_stream, args=(current_source.stderr, "LIVE_IN"), daemon=True).start()
                 else:
-                    msg = ""
-                    if current_source and current_source.stderr and current_source.poll() is not None:
-                        msg = current_source.stderr.read(4096).decode('utf-8', errors='ignore').strip()
-                    if msg:
-                        logging.info("Live stream ended: %s", msg)
-                        if "Server returned 404" in msg:
-                            logging.info("NGINX 404: Stream key mismatch. Expecting: %s", INPUT_RTMP)
-                    else:
-                        logging.info("Live stream ended")
+                    logging.info("Live stream ended")
 
                     if source_type != "BLACK":
                         logging.info("[-] Input Offline. Sending image %s." % HOLDING_PNG)
                         if current_source:
                             if current_source.poll() is None:
-                                current_source.kill()
-                            current_source.wait()
+                                stop_process(current_source, "external source")
                             current_source = None
                         current_source = get_black_generator()
                         source_type = "BLACK"
@@ -338,26 +397,53 @@ def run_relay():
                 #logging.info("Data pump: reading from %s", source_type)
                 data = current_source.stdout.read(65536)
                 if not data:
-                    msg = ""
-                    if current_source and current_source.stderr and current_source.poll() is not None:
-                        msg = current_source.stderr.read(4096).decode('utf-8', errors='ignore').strip()
-                        if msg:
-                            logging.info("ffmpeg stderr: %s", msg)
                     if source_type == "LIVE":
                         logging.info("Live Stream Ended (EOF)")
                     if current_source:
-                        if current_source.poll() is None:
-                            current_source.kill()
-                        current_source.wait()
+                        stop_process(current_source, "current source")
                         current_source = None
                     source_type = "NONE"
                     continue
-                conn.sendall(data)
-                bytes_sent = bytes_sent + len(data) if 'bytes_sent' in locals() else len(data)
+                try:
+                    conn.sendall(data)
+                except Exception as e:
+                    logging.error("Send failed: %r", e)
+
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    conn = None
+
+                    stop_process(sender, "sender")
+                    sender = None
+
+                    try:
+                        sender = start_sender()
+                        threading.Thread(target=log_stream, args=(sender.stderr, "SENDER"), daemon=True).start()
+                        conn = connect_sender()
+                    except Exception as reconnect_err:
+                        logging.error("Sender restart failed: %r", reconnect_err)
+                        stop_process(sender, "sender")
+                        sender = None
+                        conn = None
+                        source_type = "NONE"
+                        if current_source and current_source.poll() is None:
+                            stop_process(current_source, "current source")
+                        current_source = None
+                        time.sleep(2)
+                        continue
+
+                    continue
+                bytes_sent += len(data)
                 if bytes_sent % (5 * 1024 * 1024) < len(data):  # every ~5MB
                     logging.info("Pumped %d bytes to sender", bytes_sent)
             except Exception as e:
-                logging.info("Data pump exception: %r", e)
+                logging.error("Data pump exception: %r", e)
+                if current_source and current_source.poll() is None:
+                    stop_process(current_source, "current source")
+                current_source = None
+                source_type = "NONE"
                 time.sleep(0.5)
 
     except KeyboardInterrupt:
@@ -367,11 +453,9 @@ def run_relay():
     finally:
         # cleanup exactly as you already do
         if current_source:
-            current_source.kill()
-            current_source.wait()
+            stop_process(current_source, "current source")
         if sender:
-            sender.kill()
-            sender.wait()
+            stop_process(sender, "sender")
         if conn:
             conn.close()
         subprocess.run(['stty', 'sane'], check=False)
