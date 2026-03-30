@@ -177,7 +177,7 @@ def get_black_generator():
         '-vf', 'scale=%dx%d,format=yuv420p' % (WIDTH, HEIGHT),
         # Encode (keep your existing settings)
         '-r', str(FPS),
-        '-vsync', 'cfr',
+        '-fps_mode', 'cfr',
         '-c:v', 'libx264', '-preset', 'ultrafast',
         '-b:v', '6000k',
         '-maxrate', '6800k',
@@ -201,7 +201,7 @@ def get_live_generator():
         '-rw_timeout', '5000000',  # 5s Timeout
         '-i', INPUT_RTMP,
         '-r', str(FPS),
-        '-vsync', 'cfr',
+        '-fps_mode', 'cfr',
         '-c:v', 'libx264', '-preset', 'ultrafast',
         '-b:v', '6000k',
         '-maxrate', '6800k',
