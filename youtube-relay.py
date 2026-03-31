@@ -61,7 +61,7 @@ class YouTubeAPIHelper:
     def authenticate(self):
         creds = None
         if not os.path.exists(PICKLE_FILE):
-            logging.error(f"Token not found at {PICKLE_FILE}")
+            logging.error(f"Pickle file not found at {PICKLE_FILE}")
             return
         try:
             with open(PICKLE_FILE, 'rb') as token:
@@ -175,7 +175,7 @@ def get_black_generator():
         # Silent audio
         '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
         '-vf', 'scale=%dx%d,format=yuv420p' % (WIDTH, HEIGHT),
-        # Encode (keep your existing settings)
+        # Encode (keep existing settings)
         '-r', str(FPS),
         '-fps_mode', 'cfr',
         '-c:v', 'libx264', '-preset', 'ultrafast',
@@ -337,7 +337,7 @@ def run_relay():
 
             if current_source is None:
                 logging.info("No current source, starting holding image")
-                current_source = get_black_generator()   # your holding-image generator
+                current_source = get_black_generator()   # holding-image generator
                 source_type = "BLACK"
 
             # Check for Live Stream
@@ -457,7 +457,7 @@ def run_relay():
     except Exception as e:
         logging.info("Fatal error: %r", e)
     finally:
-        # cleanup exactly as you already do
+        # cleanup
         if current_source:
             stop_process(current_source, "current source")
         if sender:
