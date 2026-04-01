@@ -106,7 +106,6 @@ class YouTubeAPIHelper:
             broadcast = next((i for i in resp.get('items', []) if i.get('status', {}).get('lifeCycleStatus') == 'live'), None)
             if not broadcast:
                 broadcast = next((i for i in resp.get('items', []) if i.get('status', {}).get('lifeCycleStatus') in ('ready','created')), None)
-            
             if broadcast:
                 bid = broadcast['id']
                 logging.info(f"Updating Broadcast: {broadcast.get('snippet',{}).get('title')} ({bid})")
@@ -134,6 +133,7 @@ class YouTubeAPIHelper:
                 return bid
         except Exception as e:
             logging.error(f"API Update Failed: {e}")
+            return None
         return None
 
 def log_stream(pipe, prefix):
